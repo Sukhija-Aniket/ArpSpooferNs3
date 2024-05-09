@@ -26,7 +26,7 @@
 
 using namespace ns3;
 
-NS_LOG_COMPONENT_DEFINE ("test");
+NS_LOG_COMPONENT_DEFINE ("MITM");
 
 class AttackApp : public Application 
 {
@@ -35,7 +35,7 @@ public:
   AttackApp ();
   virtual ~AttackApp();
 
-  void Setup (Ptr<Node> aNode, Ptr<NetDevice> aDev, Ptr<Ipv4Interface> iface,  Ipv4Address addr, Ipv4Address vAddr, Address vMac);
+  void Setup (Ptr<Node> aNode, Ptr<NetDevice> aDev, Ptr<Ipv4Interface> iface,  Ipv4Address saddr, Address sMac, Ipv4Address vAddr, Address vMac);
 
 private:
   virtual void StartApplication (void);
@@ -46,7 +46,10 @@ private:
   Ptr<Node> m_node;
   Ptr<NetDevice> m_device;
   Ptr<Ipv4Interface> m_iface;
-  Ipv4Address m_fakeAddr;
+
+  // Server Info
+  Ipv4Address m_sAddr;
+  Address m_sMac;
 
   // victim info
   Ipv4Address m_vAddr;
@@ -64,7 +67,8 @@ AttackApp::AttackApp ()
   :m_node(),
   m_device(),
   m_iface(),
-  m_fakeAddr(),
+  m_sAddr(),
+  m_sMac(),
   m_vAddr(),
   m_vMac(),
   m_sendEvent (), 
@@ -77,12 +81,13 @@ AttackApp::~AttackApp()
 }
 
 void
-AttackApp::Setup (Ptr<Node> aNode, Ptr<NetDevice> aDev, Ptr<Ipv4Interface> iface, Ipv4Address addr, Ipv4Address vAddr, Address vMac)
+AttackApp::Setup (Ptr<Node> aNode, Ptr<NetDevice> aDev, Ptr<Ipv4Interface> iface, Ipv4Address saddr, Address sMac, Ipv4Address vAddr, Address vMac)
 {
   m_node = aNode;
   m_device = aDev;
   m_iface = iface;
-  m_fakeAddr = addr; // Server Address
+  m_sAddr = saddr; // Server Address
+  m_sMac = sMac;
   m_vAddr = vAddr;
   m_vMac = vMac;
 }
@@ -111,7 +116,8 @@ AttackApp::StopApplication (void)
 void 
 AttackApp::SendPacket (void)
 {
-  m_attacker.SendArpReply(m_arpCache, m_fakeAddr, m_vAddr, m_vMac);
+  m_attacker.SendArpReply(m_arpCache, m_sAddr, m_vAddr, m_vMac);
+  m_attacker.SendArpReply(m_arpCache, m_vAddr, m_sAddr, m_sMac);
   std::cout << "stucked here" << std::endl;
   ScheduleTx ();
 }
@@ -129,11 +135,11 @@ AttackApp::ScheduleTx (void)
 int 
 main ()
 {
-  LogComponentEnable ("UdpClient", LOG_LEVEL_INFO);
-  LogComponentEnable ("UdpServer", LOG_LEVEL_INFO);
-  LogComponentEnable ("ArpL3Protocol", LOG_LEVEL_INFO);
-  LogComponentEnable ("ArpHeader", LOG_LEVEL_INFO);
-  LogComponentEnable("arp1", LOG_LEVEL_INFO);
+//   LogComponentEnable ("UdpClient", LOG_LEVEL_INFO);
+//   LogComponentEnable ("UdpServer", LOG_LEVEL_INFO);
+//   LogComponentEnable ("ArpL3Protocol", LOG_LEVEL_INFO);
+//   LogComponentEnable ("ArpHeader", LOG_LEVEL_INFO);
+  LogComponentEnable("MITM", LOG_LEVEL_ALL);
   
   uint32_t nPackets = 3;
   uint32_t packetInt = 1000;
@@ -154,6 +160,7 @@ main ()
   uint32_t MaxPacketSize = 32;
   
   Address victimAddr;
+  Address serverAddr;
 
   NodeContainer csmaNodes;
   csmaNodes.Create (nCsma);
@@ -173,8 +180,8 @@ main ()
     Ptr<CsmaNetDevice> cd = nd->GetObject<CsmaNetDevice> ();
     cd->SetAddress(ns3::Mac48Address(macAddr.str().c_str()));
     // take a copy of victim addr
-    if(i == victimId)
-      victimAddr = cd->GetAddress();
+    if(i == victimId) victimAddr = cd->GetAddress();
+    if (i == serverId) serverAddr = cd->GetAddress();
     std::cout << macAddr.str()<<std::endl;
     macAddr.str(std::string());
   }
@@ -193,9 +200,10 @@ main ()
   uint32_t index = returnValue.second;
   Ptr<Ipv4Interface> iface =  ipv4->GetObject<Ipv4L3Protocol> ()->GetInterface (index);
 
+//   std::cout<<serverAddr<<" "<<serverId<<" "<<victimId<<" "<<victimAddr<<std::endl;
   //contruct attacker app
   Ptr<AttackApp> attacker = CreateObject<AttackApp> ();
-  attacker->Setup(csmaNodes.Get(attackerId), csmaDevices.Get(attackerId), iface, csmaInterfaces.GetAddress(serverId), csmaInterfaces.GetAddress(victimId), victimAddr);
+  attacker->Setup(csmaNodes.Get(attackerId), csmaDevices.Get(attackerId), iface, csmaInterfaces.GetAddress(serverId), serverAddr, csmaInterfaces.GetAddress(victimId), victimAddr);
   csmaNodes.Get (attackerId)->AddApplication (attacker);
   attacker->SetStartTime (MilliSeconds (clientStart + delayT ));
   attacker->SetStopTime (MilliSeconds (stopTime));
@@ -217,7 +225,7 @@ main ()
  
   Ipv4GlobalRoutingHelper::PopulateRoutingTables ();
  
-  csma.EnablePcapAll("arp1"); 
+  csma.EnablePcapAll("MITM"); 
   Simulator::Run ();
   Simulator::Destroy ();
   return 0;
