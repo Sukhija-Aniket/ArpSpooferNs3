@@ -35,7 +35,9 @@ public:
   AttackApp ();
   virtual ~AttackApp();
 
-  void Setup (Ptr<Node> aNode, Ptr<NetDevice> aDev, Ptr<Ipv4Interface> iface,  Ipv4Address saddr, Address sMac, Ipv4Address vAddr, Address vMac);
+  void Setup (Ptr<Node> aNode, Ptr<NetDevice> aDev, Ptr<Ipv4Interface> iface, Ipv4Address aAddr, Ipv4Address saddr, Address sMac, Ipv4Address vAddr, Address vMac);
+  void UpdateArpCache(Ipv4Address ip);
+  void OnIcmpReceived(Ptr<const Packet> packet, const Ipv4Header &ipv4Header, const Icmpv4Header &icmpHeader);
 
 private:
   virtual void StartApplication (void);
@@ -46,8 +48,10 @@ private:
   Ptr<Node> m_node;
   Ptr<NetDevice> m_device;
   Ptr<Ipv4Interface> m_iface;
+  Ptr<Icmpv4L4Protocol> m_icmpv4L4Protocol;
 
   // Server Info
+  Ipv4Address m_aAddr;
   Ipv4Address m_sAddr;
   Address m_sMac;
 
@@ -67,12 +71,14 @@ AttackApp::AttackApp ()
   :m_node(),
   m_device(),
   m_iface(),
+  m_aAddr(),
   m_sAddr(),
   m_sMac(),
   m_vAddr(),
   m_vMac(),
   m_sendEvent (), 
-  m_running (false)
+  m_running (false),
+  m_icmpv4L4Protocol()
 {
 }
 
@@ -80,16 +86,35 @@ AttackApp::~AttackApp()
 {
 }
 
+void AttackApp::OnIcmpReceived(Ptr<const Packet> packet, const Ipv4Header &ipv4Header, const Icmpv4Header &icmpHeader) {
+    if (icmpHeader.GetType() == Icmpv4Header::ICMPV4_ECHO_REPLY) {
+        AttackApp::UpdateArpCache(ipv4Header.GetSource());
+    }
+}
+
+
+ void AttackApp::UpdateArpCache(Ipv4Address ip) {
+        // Logic to update or verify ARP cache
+        std::cout << "Updating ARP cache for IP: " << ip << std::endl;
+        m_attacker.SendArpReply(m_arpCache, m_sAddr, m_vAddr, m_vMac);
+        m_attacker.SendArpReply(m_arpCache, m_vAddr, m_sAddr, m_sMac);
+        
+    }
+
 void
-AttackApp::Setup (Ptr<Node> aNode, Ptr<NetDevice> aDev, Ptr<Ipv4Interface> iface, Ipv4Address saddr, Address sMac, Ipv4Address vAddr, Address vMac)
+AttackApp::Setup (Ptr<Node> aNode, Ptr<NetDevice> aDev, Ptr<Ipv4Interface> iface, Ipv4Address aAddr, Ipv4Address saddr, Address sMac, Ipv4Address vAddr, Address vMac)
 {
   m_node = aNode;
   m_device = aDev;
   m_iface = iface;
+  m_aAddr = aAddr;
   m_sAddr = saddr; // Server Address
   m_sMac = sMac;
   m_vAddr = vAddr;
   m_vMac = vMac;
+  Ptr<Icmpv4L4Protocol> icmpv4L4Protocol = CreateObject<Icmpv4L4Protocol>();
+  m_icmpv4L4Protocol = icmpv4L4Protocol;
+  m_icmpv4L4Protocol->m_icmpReceivedTrace.ConnectWithoutContext(MakeCallback(&OnIcmpReceived, this));
 }
 
 void
@@ -99,7 +124,9 @@ AttackApp::StartApplication (void)
   m_attacker.SetNode(m_node);
   m_arpCache = m_attacker.CreateCache(m_device, m_iface);
   m_running = true;
-  SendPacket();
+  m_icmpv4L4Protocol->SendIcmpEchoRequest(m_aAddr, m_sAddr);
+  ScheduleTx();
+//   SendPacket();
 }
 
 void 
@@ -113,24 +140,43 @@ AttackApp::StopApplication (void)
     }
 }
 
+// void 
+// AttackApp::SendPacket (void)
+// {
+
+//   m_attacker.SendArpReply(m_arpCache, m_sAddr, m_vAddr, m_vMac);
+//   m_attacker.SendArpReply(m_arpCache, m_vAddr, m_sAddr, m_sMac);
+//   std::cout << "stucked here" << std::endl;
+//   ScheduleTx ();
+// }
+
 void 
 AttackApp::SendPacket (void)
 {
-  m_attacker.SendArpReply(m_arpCache, m_sAddr, m_vAddr, m_vMac);
-  m_attacker.SendArpReply(m_arpCache, m_vAddr, m_sAddr, m_sMac);
+
+  m_icmpv4L4Protocol->SendIcmpEchoRequest(m_aAddr, m_sAddr);
   std::cout << "stucked here" << std::endl;
   ScheduleTx ();
 }
 
+
 void 
-AttackApp::ScheduleTx (void)
-{
-  if (m_running)
-    {
+AttackApp::ScheduleTx(void) {
+  if (m_running) {
       Time tNext (MilliSeconds(1000));
       m_sendEvent = Simulator::Schedule (tNext, &AttackApp::SendPacket, this);
     }
 }
+
+// void 
+// AttackApp::ScheduleTx (void)
+// {
+//   if (m_running)
+//     {
+//       Time tNext (MilliSeconds(1000));
+//       m_sendEvent = Simulator::Schedule (tNext, &AttackApp::SendPacket, this);
+//     }
+// }
 
 int 
 main ()
@@ -203,7 +249,7 @@ main ()
 //   std::cout<<serverAddr<<" "<<serverId<<" "<<victimId<<" "<<victimAddr<<std::endl;
   //contruct attacker app
   Ptr<AttackApp> attacker = CreateObject<AttackApp> ();
-  attacker->Setup(csmaNodes.Get(attackerId), csmaDevices.Get(attackerId), iface, csmaInterfaces.GetAddress(serverId), serverAddr, csmaInterfaces.GetAddress(victimId), victimAddr);
+  attacker->Setup(csmaNodes.Get(attackerId), csmaDevices.Get(attackerId), iface,  csmaInterfaces.GetAddress(attackerId), csmaInterfaces.GetAddress(serverId), serverAddr, csmaInterfaces.GetAddress(victimId), victimAddr);
   csmaNodes.Get (attackerId)->AddApplication (attacker);
   attacker->SetStartTime (MilliSeconds (clientStart + delayT ));
   attacker->SetStopTime (MilliSeconds (stopTime));
