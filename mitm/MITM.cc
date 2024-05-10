@@ -71,14 +71,14 @@ AttackApp::AttackApp ()
   :m_node(),
   m_device(),
   m_iface(),
+  m_icmpv4L4Protocol(),
   m_aAddr(),
   m_sAddr(),
   m_sMac(),
   m_vAddr(),
   m_vMac(),
   m_sendEvent (), 
-  m_running (false),
-  m_icmpv4L4Protocol()
+  m_running (false)
 {
 }
 
@@ -87,11 +87,11 @@ AttackApp::~AttackApp()
 }
 
 void AttackApp::OnIcmpReceived(Ptr<const Packet> packet, const Ipv4Header &ipv4Header, const Icmpv4Header &icmpHeader) {
+    std::cout<<"Running OnIcmpReceived"<<std::endl;
     if (icmpHeader.GetType() == Icmpv4Header::ICMPV4_ECHO_REPLY) {
         AttackApp::UpdateArpCache(ipv4Header.GetSource());
     }
 }
-
 
  void AttackApp::UpdateArpCache(Ipv4Address ip) {
         // Logic to update or verify ARP cache
@@ -114,7 +114,8 @@ AttackApp::Setup (Ptr<Node> aNode, Ptr<NetDevice> aDev, Ptr<Ipv4Interface> iface
   m_vMac = vMac;
   Ptr<Icmpv4L4Protocol> icmpv4L4Protocol = CreateObject<Icmpv4L4Protocol>();
   m_icmpv4L4Protocol = icmpv4L4Protocol;
-  m_icmpv4L4Protocol->m_icmpReceivedTrace.ConnectWithoutContext(MakeCallback(&OnIcmpReceived, this));
+  std::cout<<"Completing Setup"<<std::endl;
+  m_icmpv4L4Protocol->m_icmpReceivedTrace.ConnectWithoutContext(MakeCallback(&AttackApp::OnIcmpReceived, this));
 }
 
 void
@@ -124,7 +125,20 @@ AttackApp::StartApplication (void)
   m_attacker.SetNode(m_node);
   m_arpCache = m_attacker.CreateCache(m_device, m_iface);
   m_running = true;
-  m_icmpv4L4Protocol->SendIcmpEchoRequest(m_aAddr, m_sAddr);
+  std::cout<<"Starting application"<<std::endl;
+  // Ptr<Node> node = CreateObject<Node>();
+  // InternetStackHelper stack;
+  // Ipv4ListRoutingHelper list;
+  // Ipv4StaticRoutingHelper staticRouting;
+  // list.Add(staticRouting, 0);  // Add static routing with high priority
+  // stack.SetRoutingHelper(list);  // Set the list routing helper on the stack
+  // stack.Install(node);
+
+  
+
+  Ptr<Icmpv4L4Protocol> icmpv4L4Protocol = m_node->GetObject<Icmpv4L4Protocol>();
+  icmpv4L4Protocol->SetNode(m_node);
+  icmpv4L4Protocol->SendIcmpEchoRequest(m_aAddr, m_sAddr);
   ScheduleTx();
 //   SendPacket();
 }
@@ -154,7 +168,9 @@ void
 AttackApp::SendPacket (void)
 {
 
-  m_icmpv4L4Protocol->SendIcmpEchoRequest(m_aAddr, m_sAddr);
+  Ptr<Icmpv4L4Protocol> icmpv4L4Protocol = m_node->GetObject<Icmpv4L4Protocol>();
+  icmpv4L4Protocol->SetNode(m_node);
+  icmpv4L4Protocol->SendIcmpEchoRequest(m_aAddr, m_sAddr);
   std::cout << "stucked here" << std::endl;
   ScheduleTx ();
 }
