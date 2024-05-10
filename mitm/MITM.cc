@@ -112,7 +112,8 @@ AttackApp::Setup (Ptr<Node> aNode, Ptr<NetDevice> aDev, Ptr<Ipv4Interface> iface
   m_sMac = sMac;
   m_vAddr = vAddr;
   m_vMac = vMac;
-  Ptr<Icmpv4L4Protocol> icmpv4L4Protocol = CreateObject<Icmpv4L4Protocol>();
+  Ptr<Icmpv4L4Protocol> icmpv4L4Protocol = m_node->GetObject<Icmpv4L4Protocol>();
+  icmpv4L4Protocol->SetNode(m_node);
   m_icmpv4L4Protocol = icmpv4L4Protocol;
   std::cout<<"Completing Setup"<<std::endl;
   m_icmpv4L4Protocol->m_icmpReceivedTrace.ConnectWithoutContext(MakeCallback(&AttackApp::OnIcmpReceived, this));
@@ -136,9 +137,9 @@ AttackApp::StartApplication (void)
 
   
 
-  Ptr<Icmpv4L4Protocol> icmpv4L4Protocol = m_node->GetObject<Icmpv4L4Protocol>();
-  icmpv4L4Protocol->SetNode(m_node);
-  icmpv4L4Protocol->SendIcmpEchoRequest(m_aAddr, m_sAddr);
+  // Ptr<Icmpv4L4Protocol> icmpv4L4Protocol = m_node->GetObject<Icmpv4L4Protocol>();
+  // icmpv4L4Protocol->SetNode(m_node);
+  m_icmpv4L4Protocol->SendIcmpEchoRequest(m_aAddr, m_sAddr);
   ScheduleTx();
 //   SendPacket();
 }
@@ -168,9 +169,9 @@ void
 AttackApp::SendPacket (void)
 {
 
-  Ptr<Icmpv4L4Protocol> icmpv4L4Protocol = m_node->GetObject<Icmpv4L4Protocol>();
-  icmpv4L4Protocol->SetNode(m_node);
-  icmpv4L4Protocol->SendIcmpEchoRequest(m_aAddr, m_sAddr);
+  // Ptr<Icmpv4L4Protocol> icmpv4L4Protocol = m_node->GetObject<Icmpv4L4Protocol>();
+  // icmpv4L4Protocol->SetNode(m_node);
+  m_icmpv4L4Protocol->SendIcmpEchoRequest(m_aAddr, m_sAddr);
   std::cout << "stucked here" << std::endl;
   ScheduleTx ();
 }
